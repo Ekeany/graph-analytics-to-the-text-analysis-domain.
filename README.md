@@ -122,3 +122,54 @@ Each subsection was then passed through the text summarization algorithm and the
 <p align="center">
   <img width="917" height="572" src="/Images_/image17.PNG">
 </p>
+
+<p align="center">
+  <img width="911" height="589" src="/Images_/image18.PNG">
+</p>
+
+<p align="center">
+  <img width="908" height="569" src="/Images_/image19.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image20.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image21.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image22.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image23.PNG">
+</p>
+
+<p align="center">
+  <img width="847" height="565" src="/Images_/image24.PNG">
+</p>
+
+## Community Evolution.
+As the book is divided into three smaller subsections the evolution in time of each community within each network could be examined. The Jaccard similarity metric was used to identify each community as it evolves with time. However as the distribution of words in each chapter varied wildly this metric was un accurate, these values can be seen in the table below. Therefore it seems as if each community is independent upon its position in the story line.
+
+<p align="center">
+  <img width="943" height="418" src="/Images_/image25.PNG">
+</p>
+
+However, from an examination of the communnities both Lennie and George form their own communities at every time step in the story. The two figures below represent the variation in sentiment for both George and Lennie’s communities as the storyline progresses. The first figure depicts the emotional change of each cluster using a number of emotional categories including Trust, Sadness, Joy and Fear etc. And the second figure shows the change on a more rudimentary sentiment score. From the emotional
+
+<p align="center">
+  <img width="941" height="616" src="/Images_/image26.PNG">
+</p>
+
+<p align="center">
+  <img width="921" height="619" src="/Images_/image27.PNG">
+</p>
+
+From an emotional standpoint we can see a decrease in Lennie’s Joy, Trust, Fear and Sadness as the story line progresses, whereas, George’s anticipation increases. This somewhat infers the end scene of the book where Lennie was essentially put out of his misery and the decision on George’s part caused an increase in anxiety with the thought of completing the act. From the more rudimentary sentiment score we can see that Lennie’s is a more positive character than George. Therefore this graph does encapsulate Lennie’s innocent personality, the transition from positive to negative in the last sub section also represents the negative sentiment associated with Lennie as he has killed a puppy and Curly’s wife, and the whole ranch is looking to lynch him.
+
+## Conclusion. 
+
+This report presented a type of text network analysis that draws upon approaches and methodology used in graph analysis in order to interpret textual data. This method of text network analysis produces a readable visual representation of a novel, which can then be used to provide a summary, expose the text’s topical structure and find influential concepts. Each topical cluster in each subsection of the novel varied wildly around certain characters which inferred their interaction with their environment. Unfortunately due to the nature of a novel the community evolution of each topical cluster couldn’t be automated as the Jacard similarity measure failed to capture evolving communities as the words around characters varied wildly from section to section. Instead the two apparent clusters representing the two main protagonists in the story “Lennie” and “George’s” sentiments were examined over the entire story line. The named entity graph also provided a picture of the interaction between certain characters and objects such as Curly and his wife, or Carlson’s gun which was used to kill Lennie and a dog. In essence this is a novel tool to provide a textual summary based on a 2D graph. However, in conclusion a book is too complex to be decoded and explained using a handful of selected words.
