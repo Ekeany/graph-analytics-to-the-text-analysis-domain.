@@ -46,3 +46,58 @@ The third plot encapsulates a more rudimentary sentiment metric which refers to 
   <img width="956" height="626" src="/Images_/image3.PNG">
 </p>
 
+### Pairwise correlation.
+The figure below represents the pairwise correlation between co-occurring words throughout the entire book. This metric differs from the bigram count as it quantifies how often word pairs appear together relative to how often they appear separately. Both community detection and centrality measures where implemented on the network in order to identify clustered sub groups of relevant words and to also highlight the most important topical words. Both the Louvain and Walktrap algorithms were implemented in this project. The Louvain algorithm returned a higher modularity value relative to Walktrap. However, as this algorithm is based on modularity maximization it has the tendency to force smaller communities into larger communities thus losing the semantic definition of smaller sub groups of words. Despite this flaw it was chosen over Walktrap as it gave a higher modularity and allowed for a full evaluation of each community. The centrality measures used for this report were betweenness and degree centrality. Both metrics are intuitive and easy to understand the betweenness of a node refers to the number of shortest paths that pass through it. While the degree centrality is the total number of both in and out degree of a specific node. Both algorithms return similar results and do an excellent job at highlight the important bridges in the graph. Other metrics such as eccentricity, intra cluster density and clique analysis were also considered however I felt as if the community subgraph gave enough detail and the eccentricity/intra density give information about the community structure but not about the content or the relationships of the words that the networks represent. The color and size of each node represents the community it belongs to and it’s centrality score. This method does summarize certain aspects of the book such as objects, places and sub characters however it lacks coherence and structure as the correlation between singular word pairs cannot encapsulate the information of the sentences paragraphs and chapters.
+
+#### Community Detction.
+Waltrap is a hierarchical clustering algorithm. It is predicated upon the idea that short distance random walks tend to stay in the same community. Starting from a totally non-clustered partition, the distances between all adjacent nodes are computed. Then, two adjacent communities are chosen, and merged together to form a new one and the distances between communities are updated. This step is repeated N???1 times.
+
+*Louvain* is a greedy optimization method that attempts to optimize the “modularity” of a partition of the network . The algorithm is performed in two steps. First, the method looks for “small” communities by optimizing modularity locally. Second, it aggregates nodes belonging to the same community and builds a new network whose nodes are the communities. These steps are repeated iteratively until a maximum of modularity is attained and a hierarchy of communities is produced.
+
+#### Centrality.
+The Betweenness Centrality algorithm calculates the shortest path between every pair of nodes in a connected graph. Each node receives a score, based on the number of these shortest paths that pass through the node. Therfore, nodes that most frequently lie on these shortest paths will have a higher betweenness centrality score.
+
+The Degree centrality algorithm, is defined as the number of edges incident upon a node. In the case of a directed network, we usually define two separate measures of degree centrality, namely outdegree and indegree. Accordingly, indegree is a count of the number of edges directed to the node and outdegree is the number of edges that the node directs to others.
+
+<p align="center">
+  <img width="940" height="620" src="/Images_/image4.PNG">
+</p>
+
+### Named Entity Network.
+Due to the frequency of the main characters, objects and places in the novel their pairwise correlation values were negligible. Thus causing them to be absent from the correlation graph. To combat this and obtain a better understanding of their relationships I constructed a new network that only contained these nodes. This graph was created by using named entity extraction to isolate the main characters places and organizations in the novel. Also a few important objects such as Carlson’s gun was manually added. To create the graph a sliding window was passed over the entire text to calculate the number of occurrences each character, object or place made relative to one another inside the window irrespective of their element wise distance. The number of co-occurrences represented the weighted edges in the graph and the nodes represented each word. The size of each node indicates the centrality measures of each node respectively. The graph clearly indicates that George, Lennie, Curly and Soledad are the most important nodes in the graph which makes sense as George and Lennie are the main protagonists while Curly could be viewed as the antagonist and Soledad is where the story takes place. The color of each node indicates it’s parent community. The communities themselves however are fairly broad or isolated and don’t really resemble the true interactions. Despite this one community does isolate Lennie George Carlson, Curly and the dog to the gun which does replicate the storyline.
+
+<p align="center">
+  <img width="909" height="875" src="/Images_/image5.PNG">
+</p>
+
+## Visualization of Texts Polysingularity.
+In this section the algorithm inspired by Dmitry Paranyushkin’s 2012 paper was implemented on the novel. The book was broken down into three subsections i.e
+
+<p align="center">
+  <img width="938" height="155" src="/Images_/image6.PNG">
+</p>
+
+Each subsection was then passed through the text summarization algorithm and the most important one hundred sentences were extracted. The sliding window was then applied to this newly summarized text and an edge list representing the weighted co-occurrences of each words was produced. The centrality and community of each word was also calculated using betweeness and Louvain respectively. Each subsection was individually plotted where the color of each node represents the community they belong to and the size of node indicates it’s centrality within the network. The text label of each node could not be displayed on the large graph as it was too confusing to visualize. In each subsection a total of 9 communities were detected using the Louvain algorithm each of these communities were extracted from the graph and plotted individually with the centrality and labels present. Each community represents a cluster of words from the book, examining each cluster gives an indication on how the characters are interacting with their enviorment. Altough other clusters do not provide any relevant information about the story at all. Unfortuantly to intepret each cluster you really would have had read the book previous. Despite this some of the clusters such as community eight in the final subsection details the end scene of the novel where George shoots Lennie. Also other communties describe the sub characters like Curly and his wife or how the book treats crook the black workhand.
+
+<p align="center">
+  <img width="883" height="547" src="/Images_/image7.PNG">
+</p>
+
+<p align="center">
+  <img width="901" height="589" src="/Images_/image8.PNG">
+</p>
+
+<p align="center">
+  <img width="922" height="569" src="/Images_/image9.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image10.PNG">
+</p>
+<p align="center">
+  <img width="922" height="569" src="/Images_/image11.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image12.PNG">
+</p>
