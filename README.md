@@ -94,10 +94,31 @@ Each subsection was then passed through the text summarization algorithm and the
 <p align="center">
   <img width="917" height="572" src="/Images_/image10.PNG">
 </p>
+
 <p align="center">
   <img width="922" height="569" src="/Images_/image11.PNG">
 </p>
 
 <p align="center">
   <img width="917" height="572" src="/Images_/image12.PNG">
+</p>
+
+<p align="center">
+  <img width="924" height="585" src="/Images_/image13.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image14.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image15.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image16.PNG">
+</p>
+
+<p align="center">
+  <img width="917" height="572" src="/Images_/image17.PNG">
 </p>
