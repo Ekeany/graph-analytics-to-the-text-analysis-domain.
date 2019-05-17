@@ -1,0 +1,1603 @@
+---
+title: "FinalWebNetwork"
+author: "Eoghan Keany"
+date: "5 April 2019"
+output: 
+  html_document:
+    self_contained: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction.
+
+The brain reads information in a linear fashion with the eye moving from left to right, from top to bottom. However, this is not the most efficient method of obtaining a brief summary of the information at hand. Using a combination of both natural language processing and network science a graphical approach was used in an attempt to summarize the main themes and relationships of a novel. 
+
+Representing text through the framework of a network, provides numerous graphical tools that can be used to detect communities of interrelated concepts, find the most influential characters/concepts, and more importantly offer a quantitative evaluation of textual data. In essence, a network allows the user to visualize the topical structure of the text and use the graph's inherent structural property to evaluate the relative importance of the topics, to formulate meaning.
+
+The methodology used to create the text networks within this report was inspired by a paper titled "Visualization of Text's Polysingularity Using Network Analysis" (Dmitry Paranyushkin, 2012). This process involved encoding every word in the preprocessed text as a node where the co-occurrence between words was used as the connection between them. The algorithm was predicated upon a sliding window that is moved incrementally through the text. Every word within this window is considered to be connected, although the weight of this connection is based upon their element wise distance in the window.
+
+### Novel Summary.
+The novel chosen for this report was John Steinbeck's well-known classic, "Of Mice & Men". A brief description of the novel is provided below to inform the reader about the basic content of the novel in order to qualitatively understand the analysis;
+
+"One evening, two men, on their way to a ranch, stop at a stream near the Salinas River. George, who is short and dark, leads the way. The person following him is Lennie, a giant of a man with huge arms. During their conversation by the stream, George repeatedly asks Lennie to keep his mouth shut on the ranch, suggesting that Lennie has some kind of problem. After supper and before going to sleep, the two of them talk about their dream to own a piece of land.
+
+The next day, George and Lennie travel to the ranch to start work. They are given two beds in the bunkhouse. Then Old Candy introduces them to almost everybody on the ranch. They meet the boss and the boss's son Curley, who is quite rude. They also meet Curley's wife when she comes looking for her husband. She wears heavy make-up and possesses a flirtatious attitude. George warns Lennie to behave his best around Curley and his wife. He also suggests that they should meet by the pool if anything unfortunate happens to either of them on the ranch.
+
+George and Lennie are assigned to work with Slim, who is sensible and 'civilized' and talks with authority. George finds Slim an understanding confidante, and a bond forms between the two of them. When Curley wrongly accuses Slim for talking to his wife, Slim gets very angry. Curley apologizes to him in the bunkhouse in front of everybody, but his apology is rejected. Curley vents his frustration on Lennie, trying to pick a fight. Lennie does not hit back initially, but when George asks him to, Lennie obliges and crushes Curley's hand. Curley agrees that he will not tell anyone about his hand, for it would mean losing his self-respect.
+
+While working on the ranch, George and Lennie continue to dream about owning their own piece of land and make plans accordingly. Old Candy, one of the ranch hands, overhears their planning and asks to join them. He even offers to contribute all of his savings to purchase the land. George and Lennie accept his proposal.
+
+One evening, Lennie, looking for his puppy, enters the room of Crooks; since he is the only black man on the ranch, Crooks lives alone, segregated from the other ranch workers. Candy enters, looking for Lennie; the two of them tell Crooks about their dream of owning their own ranch, but Crooks tells them that it will never happen, foreshadowing the truth. Curley's wife comes in and interrupts them. When Crooks objects to her presence in his room, she threatens him with a false rape charge.
+Later on, Lennie is seen alone in the barn, petting his dead pup. He has unintentionally killed it by handling it too hard. Now he is grieving over the loss. Curley's wife walks into the barn and strikes up a conversation with Lennie. As they talk, she asks him to stroke her hair. She panics when she feels Lennie's strong hands. When she raises her voice to him, Lennie covers her mouth. In the process, he accidentally breaks her neck and she dies. Knowing he has done something terrible, he leaves the ranch. When the ranch hands learn that Curley's wife has been killed, they rightly guess the guilty party. Led by an angry Curley, they all go out to search for Lennie. They plan to murder him in retribution.
+
+George guesses where Lennie is and races to the pool. To save him from the brutal assaults of the ranch hands, George mercifully kills his friend himself. Hearing the gunshot, the searchers converge by the pool. They praise George for his act. Only Slim understands the actual purpose of George's deed." (http://thebestnotes.com, 2017)
+
+### Natural Language Processing.
+Natural Language Processing (NLP) is a sub-field of Artificial Intelligence that is focused on enabling computers to understand and process human language. A number of these techniques were implemented in conjunction with the network analysis to complement and highlight certain aspects of the text. Besides the standard preprocessing techniques such as word tokenization, stemming and the removal of stop words. More explanatory techniques such as part of speech tagging, td_idf and sentiment analysis were all implemented within this report. One of the more unique techniques used within this report was text summarization. This was implemented using the LexRanker package in R which constructs a network where each sentence represents a node and the edges are the pairwise correlation between sentences. The Page Rank algorithm is then used to find the most important sentences in the text. This technique was used to shorten the text used within the report and to make more interpretable graph structures
+
+The first technique implemented was simply a frequency count of the top 15 words in each chapter of the book. The frequency of each word was scaled using the inverse document frequency which assigns a higher weight to more important and relevant words in each chapter. The plots give a brief introduction to the content of each chapter however. No theme, relationships or characters are defined
+
+```{r chunk1, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,echo=FALSE}
+library(tidyverse)
+library(stringr)     
+library(tidytext)       
+library(widyr)
+library(tibble)
+library(igraph)
+library(ggraph)
+library(rJava)
+library(NLP)
+library(tm) 
+library(openNLP)
+library(qdap)
+library(RWeka)
+library(plyr)
+library(magrittr)
+library(topicmodels)
+library(SnowballC)
+library(tidygraph)
+library(syuzhet)
+library(readr) 
+library(seriation)
+library(gridExtra)
+library(kableExtra)
+
+book_title = "Of Mice and Men"
+chapters = 1:6
+chapter_stem = "MiceofMenChapter"
+ext <-".txt"
+folder<- "//fs2/18234602/Desktop/book/"
+
+PosTagged <- function(){
+  dataframes_ <- c()
+  BookChapters <- c()
+  for(i in chapters){
+    chapter <-paste0(folder,chapter_stem,i,ext)
+    RAW <-readChar(chapter, file.info(chapter)$size)
+    temp <- stringr::str_replace_all(RAW,"[^a-zA-Z\\s]", " ")
+    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+    temp2 <- tolower(temp)
+    BookChapter <- temp2 %>%
+      gsub("[\r\n]+", " ", .) %>%
+      gsub('^"',"",.) %>%
+      gsub('"$',"",.) %>% as.String
+    
+    BookChapters[i] <- RAW %>%
+      gsub("[\r\n]+", " ", .) %>%
+      gsub('^"',"",.) %>%
+      gsub('"$',"",.) %>% as.String
+    
+    token_annotator <- Maxent_Word_Token_Annotator()
+    init_s_w = annotate(BookChapter, list(Maxent_Sent_Token_Annotator(),
+                                           Maxent_Word_Token_Annotator()))
+    pos_res = annotate(BookChapter, Maxent_POS_Tag_Annotator(), init_s_w)
+    word_subset = subset(pos_res, type=='word')
+    tags = sapply(word_subset$features , '[[', "POS")
+    
+    dataframes_[[i]] = tibble(words = BookChapter[word_subset], Chapter = i , pos=tags) %>% 
+      filter(!str_detect(pos, pattern='[[:punct:]]')) %>%
+      filter(!words %in% stop_words$word)
+  }
+  
+  return(list(book = paste(BookChapters, collapse = ' '), data = rbind(dataframes_[[1]], dataframes_[[2]],dataframes_[[3]],dataframes_[[4]],dataframes_[[5]],dataframes_[[6]])))
+}
+
+POSData <- PosTagged()
+
+POSData$data %>%
+  dplyr::count(Chapter,words,sort = TRUE) %>%
+  bind_tf_idf(Chapter,words, n) %>%
+  arrange(-tf_idf) %>%
+  group_by(Chapter) %>%
+  do(head(., n = 20)) %>%
+  ungroup %>%
+  mutate(words = reorder(words, n)) %>%
+  mutate(Chapter = as.factor(Chapter)) %>%
+  ggplot(aes(words, n, fill = Chapter)) +
+  scale_fill_brewer(palette = 'Dark2')+
+  geom_col( show.legend = FALSE) +
+  facet_wrap(~ Chapter, scales = "free") +
+  coord_flip()
+
+```
+
+The second technique utilized was sentiment analysis this was implemented using the Tidytext package in R. This package provided a referenced data frame that contained the sentiment score of a variety of words. The chapter wise emotional sentiment was then calculated using a number of emotional categories including Trust, Sadness, Joy and Fear etc. From the figure below the overall distribution of each chapter varies slightly however there is a large discrepancy in the total number of words in each chapter which can be neglected based upon the relative size of each chapter.
+
+```{r chunk2, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,echo=FALSE}
+miceOFmen <- tibble()
+#read in each chapter
+for(i in chapters){
+  chapter <-paste0(folder,chapter_stem,i,ext)
+  raw<-readChar(chapter, file.info(chapter)$size)
+  chapter_text <- raw %>%
+    gsub("[\r\n]+", " ", .) %>%
+    gsub('^"',"",.) %>%
+    gsub('"$',"",.)
+  
+  text = unlist(strsplit(chapter_text, "(?<=[[:punct:]])\\s(?=[A-Z])", perl=T))
+  #creates a tibble with 3 cols: book_title, chapter, word
+  words <- tibble(title = book_title, chapter= as.character(i), sentences = text) 
+  
+  miceOFmen <- rbind(miceOFmen, words) # add rows to the book tibble
+  
+}
+
+textCorpus <- VCorpus(VectorSource(miceOFmen$sentences))
+textCorpus <- tm_map(textCorpus, content_transformer(tolower))
+textCorpus <- tm_map(textCorpus, removePunctuation)
+textCorpus <- tm_map(textCorpus, removeNumbers)
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x) # create remove URL function
+textCorpus <- tm_map(textCorpus, content_transformer(removeURL)) # remove URLs using function
+textCorpus <- tm_map(textCorpus, removeWords, c(stopwords(kind="en"), "said"))
+textCorpus <- tm_map(textCorpus, stripWhitespace)
+
+token_delim <- " \\t\\r\\n.!?,;\"()"
+NgramTokenizer <- function(min, max) {
+  result <- function(x){
+    RWeka::NGramTokenizer(x, RWeka::Weka_control(min = min, max = max, delimiters=token_delim))
+  }
+  return(result)
+}
+
+textTDM<- TermDocumentMatrix(textCorpus, control=list(tokenize=NgramTokenizer(min=1, max=1)))
+
+esvSentiment<-get_nrc_sentiment(miceOFmen$sentences)
+Bible_ESV_Sentiment <- cbind(miceOFmen, esvSentiment)
+
+Bible_ESV_Sentiment %>% 
+  gather(emotion, value, 4:13) %>%
+  group_by(chapter,emotion) %>%
+  dplyr::summarise(total_emotion = sum(value)) %>%
+  ggplot(aes(x = emotion, y = total_emotion, fill = emotion)) +
+  geom_bar(stat = "identity") +
+  coord_flip()+
+  facet_wrap(~chapter)+
+  theme(legend.position = "none") +
+  xlab("Sentiment") +
+  ylab("Total Count") + 
+  labs(title = "Of Mice & Men",
+       subtitle = "Emotional Content by Chapter")
+
+
+```
+The third plot encapsulates a more rudimentary sentiment metric which refers to the number of either positive or negative words in a sentence. The total sentiment for each sentence in every chapter was plotted to give an indication on plot progression as a function of time. The two large down spikes at the middle and end of the book correspond to intense parts revolving crook's the farm hand sheep dog being shot and the death of Candy. The problem with this form of analysis is that the sentiment is predicated upon how the author linguistically describes the scene. This is apparent as the climatic end scene where George shoots his best friend is not indicated by a large negative score as the scene involves George trying to make Lennie feel at ease by painting a picture about a better life where the owned their own land.
+
+```{r chunkNew,warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,echo=FALSE}
+Bible_ESV_line <- miceOFmen %>% mutate(linenumber = row_number())
+tidy_books <- Bible_ESV_line %>% unnest_tokens(word,sentences)
+
+tidy_books_sentiment <- tidy_books %>% 
+  inner_join(get_sentiments("bing")) %>%
+  dplyr::count(chapter,linenumber,sentiment) %>% 
+  spread(sentiment, n, fill = 0) %>% 
+  mutate(sentiment=positive - negative)
+
+ggplot(tidy_books_sentiment, aes(x = linenumber, y = sentiment, fill = chapter))+
+  geom_bar(stat="identity")+
+  labs(title = "Of Mice & Men",
+       subtitle = "Sentiment From cover to cover")+
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        strip.text = element_blank(),
+        panel.background = element_blank(),
+        legend.position = 'bottom')
+```
+
+### Pairwise correlation.
+The figure below represents the pairwise correlation between co-occurring words throughout the entire book. This metric differs from the bigram count as it quantifies how often word pairs appear together relative to how often they appear separately. Both community detection and centrality measures where implemented on the network in order to identify clustered sub groups of relevant words and to also highlight the most important topical words. Both the Louvain and Walktrap algorithms were implemented in this project. The Louvain algorithm returned a higher modularity value relative to Walktrap. However, as this algorithm is based on modularity maximization it has the tendency to force smaller communities into larger communities thus losing the semantic definition of smaller sub groups of words. Despite this flaw it was chosen over Walktrap as it gave a higher modularity and allowed for a full evaluation of each community. The centrality measures used for this report were betweenness and degree centrality. Both metrics are intuitive and easy to understand the betweenness of a node refers to the number of shortest paths that pass through it. While the degree centrality is the total number of both in and out degree of a specific node. Both algorithms return similar results and do an excellent job at highlight the important bridges in the graph. Other metrics such as eccentricity, intra cluster density and clique analysis were also considered however I felt as if the community subgraph gave enough detail and the eccentricity/intra density give information about the community structure but not about the content or the relationships of the words that the networks represent. The color and size of each node represents the community it belongs to and it's centrality score. This method does summarize certain aspects of the book such as objects, places and sub characters however it lacks coherence and structure as the correlation between singular word pairs cannot encapsulate the information of the sentences paragraphs and chapters.
+
+#### Community Detction.
+
+**Waltrap** is a hierarchical clustering algorithm. It is predicated upon the idea that short distance random walks tend to stay in the same community. Starting from a totally non-clustered partition, the distances between all adjacent nodes are computed. Then, two adjacent communities are chosen, and merged together to form a new one and the distances between communities are updated. This step is repeated N???1 times.
+
+
+**Louvain** is a greedy optimization method that attempts to optimize the "modularity" of a partition of the network . The algorithm is performed in two steps. First, the method looks for "small" communities by optimizing modularity locally. Second, it aggregates nodes belonging to the same community and builds a new network whose nodes are the communities. These steps are repeated iteratively until a maximum of modularity is attained and a hierarchy of communities is produced.
+
+#### Centrality.
+The **Betweenness Centrality** algorithm calculates the shortest path between every pair of nodes in a connected graph. Each node receives a score, based on the number of these shortest paths that pass through the node. Therfore, nodes that most frequently lie on these shortest paths will have a higher betweenness centrality score.
+
+The **Degree centrality** algorithm, is defined as the number of edges incident upon a node. In the case of a directed network, we usually define two separate measures of degree centrality, namely outdegree and indegree. Accordingly, indegree is a count of the number of edges directed to the node and outdegree is the number of edges that the node directs to others.
+
+```{r chunk7,warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,echo=FALSE}
+
+filteredCorr <- POSData$data %>% filter(pos %in% c('NN','VB','JJ')) %>% group_by(words) %>%
+  filter(n() >= 11) %>%
+  pairwise_cor(item=words, feature=Chapter) %>% 
+  filter(!is.na(correlation), correlation >= 0.60)
+
+Filtered_correlation_graph  <- as_tbl_graph(filteredCorr , directed = FALSE)
+louivan <- igraph::cluster_louvain(Filtered_correlation_graph )
+degreee <- igraph::betweenness(Filtered_correlation_graph)
+  
+Filtered_correlation_graph %>% mutate(louvinCommunities = louivan$membership,
+           degrre = degreee) -> Filtered_correlation_graph
+
+ggraph(Filtered_correlation_graph, layout = "fr") +
+  geom_edge_link2(aes(edge_alpha = correlation), edge_width=0.5, show.legend = FALSE) +
+  geom_node_point(aes(color = as.factor(louvinCommunities), size = degrre) ) +
+  geom_node_text(aes(label = name), size = 4, repel = TRUE, segment.color = "red", segment.alpha = 0.7, segment.size = 0.4) + 
+  theme_void()+
+  labs(title = "Of Mice & Men",
+       subtitle = "ChapterWise Correlation")
+```
+
+### Named Entity Network.
+Due to the frequency of the main characters, objects and places in the novel their pairwise correlation values were negligible. Thus causing them to be absent from the correlation graph. To combat this and obtain a better understanding of their relationships I constructed a new network that only contained these nodes. This graph was created by using named entity extraction to isolate the main characters places and organizations in the novel. Also a few important objects such as Carlson's gun was manually added. To create the graph a sliding window was passed over the entire text to calculate the number of occurrences each character, object or place made relative to one another inside the window irrespective of their element wise distance. The number of co-occurrences represented the weighted edges in the graph and the nodes represented each word. The size of each node indicates the centrality measures of each node respectively. The graph clearly indicates that George, Lennie, Curly and Soledad are the most important nodes in the graph which makes sense as George and Lennie are the main protagonists while Curly could be viewed as the antagonist and Soledad is where the story takes place. The color of each node indicates it's parent community. The communities themselves however are fairly broad or isolated and don't really resemble the true interactions. Despite this one community does isolate Lennie George Carlson, Curly and the dog to the gun which does replicate the storyline.
+
+```{r chunk3, warning=FALSE, message=FALSE, fig.width = 12, fig.height = 12,echo=FALSE}
+
+ngram_tokenizer <- function(n = 1L, skip_word_none = TRUE) {
+  stopifnot(is.numeric(n), is.finite(n), n > 0)
+  options <- stringi::stri_opts_brkiter(type="word", skip_word_none = skip_word_none)
+  function(x) {
+    stopifnot(is.character(x))
+    tokens <- unlist(stringi::stri_split_boundaries(x, opts_brkiter=options))
+    len <- length(tokens)
+    
+    if(all(is.na(tokens)) || len < n) {
+      character(0)
+    } else {
+      sapply(
+        1:max(1, len - n + 1),
+        function(i) stringi::stri_join(tokens[i:min(len, i+n-1)], collapse = " ")
+      )
+    }
+  }
+}
+
+x <- data.frame(Sequence = ngram_tokenizer(6)(tolower(POSData$book)))
+
+main_characters <- c("lennie","george", "crooks","whit","boss","carlson","candy","slim","curley","wife",'salinas river','gabilan mountains','mice','weed','ranch','farmland', 'salinas valley', 'bunkhouse', 'wood', 'gun', 'luger', 'dog','barn', 'rabbits','soledad')
+indices <- c()
+for(i in 1:length(main_characters)){
+  indices[[length(indices)+1]] <- which(str_detect(x$Sequence, main_characters[i]))
+}
+
+OfMiceAndMen <- tibble()
+for(i in 1:length(main_characters)){
+  TempIntersection <- c()
+  from <- c()
+  to <- c()
+  names <- c()
+  for(j in i:length(main_characters)){
+    TempIntersection[j] <- length(intersect(indices[[i]], indices[[j]]))
+    from[j] <- main_characters[i]
+    to[j] <- main_characters[j]
+    names[j] <- main_characters[i]
+  }
+  tempTibble <- tibble(From = from, To =to, Edges = TempIntersection, Name = names)
+  OfMiceAndMen <- rbind(OfMiceAndMen, tempTibble)
+}
+
+OfMiceAndMen %>% 
+  na.omit() %>%
+  filter(From != To) %>%
+  filter(Edges != 0) -> OfMiceAndMen
+
+graph <- as_tbl_graph(OfMiceAndMen, directed = F)
+degreee <- igraph::betweenness(graph)
+comunity <- igraph::cluster_louvain(graph)
+walktrap <-  igraph::cluster_walktrap(graph)
+
+graph %>% mutate(degre = degreee,
+                 Community = comunity$membership,
+                 Walktrap = walktrap$membership) -> graph
+  
+
+layout <- create_layout(graph, layout = "fr")
+ggraph(layout) + 
+  geom_edge_link(aes(edge_alpha = Edges)) + 
+  geom_node_point(aes(color = as.factor(Walktrap), size = degre))+
+  geom_node_text(aes(label = name), size = 4, repel = TRUE)+
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Main Characters")
+
+```
+
+```{r chunk4, warning=FALSE, message=FALSE, fig.width = 12, fig.height = 8,eval = FALSE,echo=FALSE}
+library(xml2)
+library(rvest)
+library(lexRankr)
+
+top_3 = lexRankr::lexRank(miceOFmen$sentences,
+                          #only 1 article; repeat same docid for all of input vector
+                          docId = rep(1, length(miceOFmen$sentences)),
+                          #return 3 sentences to mimick /u/autotldr's output
+                          n = 500,
+                          continuous = TRUE)
+
+#reorder the top 3 sentences to be in order of appearance in article
+order_of_appearance = order(as.integer(gsub("_","",top_3$sentenceId)))
+#extract sentences in order of appearance
+ordered_top_3 = top_3[order_of_appearance, "sentence"]
+
+top <- paste(ordered_top_3,collapse="") 
+
+#fileConn<-file("F:/Desktop/output.txt")
+#writeLines(top, fileConn)
+#close(fileConn)
+
+```
+
+### Visualization of Texts Polysingularity.
+
+In this section the algorithm inspired by Dmitry Paranyushkin's  2012 paper was implemented on the novel. The book was broken down into three subsections i.e 
+```{r chunktable,echo=FALSE}
+column1 <- c('The Begining','The Middle','The End')
+column2 <- c('Chapter 1-2','Chapter 3-4','Chapter 5-6')
+cbind('Sub Section' = column1, 'Chapter' = column2) %>%
+  kable() %>%
+  kable_styling()
+
+```
+Each subsection was then passed through the text summarization algorithm and the most important one hundred sentences were extracted. The sliding window was then applied to this newly summarized text and an edge list representing the weighted co-occurrences of each words was produced. The centrality and community of each word was also calculated using betweeness and Louvain respectively. Each subsection was individually plotted where the color of each node represents the community they belong to and the size of node indicates it's centrality within the network. The text label of each node could not be displayed on the large graph as it was too confusing to visualize.  In each subsection a total of 9 communities were detected using the Louvain algorithm each of these communities were extracted from the graph and plotted individually with the centrality and labels present. Each community represents a cluster of words from the book, examining each cluster gives an indication on how the characters are interacting with their enviorment. Altough other clusters do not provide any relevant information about the story at all. Unfortuantly to intepret each cluster you really would have had read the book previous. Despite this some of the clusters such as community eight in the final subsection details the end scene of the novel where George shoots Lennie. Also other communties describe the sub characters like Curly and his wife or how the book treats crook the black workhand.
+
+```{r chunk5, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,include=FALSE}
+ngram <- 5
+fileName <- 'F:/Desktop/output.txt'
+#fileName <- 'F:/Desktop/chapter1_2.txt'
+SummarisedText <- readChar(fileName, file.info(fileName)$size)
+stopWords <- stopwords("en")
+words <- c('s','t','ya','gonna','little','put','can')
+removeWords(SummarisedText,stopWords) -> SummarisedText
+gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+removeWords(SummarisedText,words) -> SummarisedText
+str_squish(SummarisedText) -> SummarisedText
+
+FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+splitFiveGram <- strsplit(FiveGram, " ")
+
+FiveGramTibble <- tibble()
+weights <- c(0,1,0.75,0.5,0.25)
+for(i in 1:length(splitFiveGram )){
+  tempStorage <- c()
+  tempStorage2 <- c()
+  weight <- c()
+  for(j in 2:ngram){
+    tempStorage[j-1] <- splitFiveGram [[i]][1]
+    tempStorage2[j-1] <- splitFiveGram [[i]][j]
+    weight[j-1] <-  weights[j]
+  }
+  tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+  FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+}
+
+FiveGramTibble %>% 
+  dplyr::group_by(From,To) %>%
+  dplyr::summarise(Edges = sum(Edges)) %>%
+  dplyr::filter(Edges > 0) -> FiveGramTibble
+
+Graph <- as_tbl_graph(FiveGramTibble, directed = FALSE)
+louivan <- igraph::cluster_louvain(Graph)
+walktrap <-  igraph::cluster_walktrap(Graph)
+degreee <- igraph::betweenness(Graph)
+
+
+Graph %>% 
+  mutate(louvinCommunities = louivan$membership,
+         walktrapCommunities = walktrap$membership,
+         degrre = degreee) -> Graph
+
+layout <- create_layout(Graph,  layout = 'fr')
+ggraph(layout) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) , alpha = 0.5, size = degrre)) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture")
+
+
+```
+
+```{r chunk6, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,include=FALSE}
+
+sub <- c()
+for(i in 1:length(unique(louivan$membership))){
+  sub[[i]] <- induced.subgraph(Graph,which(V(Graph)$louvinCommunities == i))
+}
+
+List_Plots <- c()
+coloors <- c('red','chocolate','blueviolet','darkolivegreen','darkorange1',
+             'deepskyblue','firebrick','blue','magenta','tan1','purple1')
+for(i in 1:length(unique(louivan$membership))){
+  layout <- create_layout(sub[[i]],  layout = 'fr')
+  List_Plots[[i]] <- ggraph(layout) + 
+    geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+    geom_node_point(aes(alpha = 0.5, size = degrre),color = coloors[i]) +
+    #geom_node_label(aes(label = name), size = 2, alpha =0.8,color = coloors[i])+
+    geom_node_text(aes(label = name), size = 4,repel = FALSE)+
+    theme_graph() + 
+    ggtitle(paste0("Community", i, collapse = ": "))+
+    theme(legend.position = 'none',
+          plot.title = element_text(size = 10, face = "bold"))
+}
+
+
+#List_Plots[1]
+#grid.arrange(grobs = List_Plots[2:3], ncol = 2)
+#grid.arrange(grobs = List_Plots[4:5], ncol = 2)
+#grid.arrange(grobs = List_Plots[6:7], ncol = 2)
+#grid.arrange(grobs = List_Plots[8:9], ncol = 2)
+#grid.arrange(grobs = List_Plots[10:11], ncol = 2)
+
+
+```
+
+
+```{r chunk8, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,echo=FALSE}
+texexcture <- function(file){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) -> Graph
+  
+  return(Graph)
+}
+
+
+plots <- function(file){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) -> Graph
+  
+  sub <- c()
+  for(i in 1:length(unique(louivan$membership))){
+    sub[[i]] <- induced.subgraph(Graph,which(V(Graph)$louvinCommunities == i))
+  }
+  
+  List_Plots <- c()
+  coloors <- c('red','chocolate','blueviolet','darkolivegreen','darkorange1',
+               'deepskyblue','firebrick','blue','magenta','tan1','purple1')
+  for(i in 1:length(unique(louivan$membership))){
+    layout <- create_layout(sub[[i]],  layout = 'fr')
+    List_Plots[[i]] <- ggraph(layout) + 
+      geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+      geom_node_point(aes(alpha = 0.5, size = degrre),color = coloors[i]) +
+      #geom_node_label(aes(label = name), size = 2, alpha =0.8,color = coloors[i])+
+      geom_node_text(aes(label = name), size = 4,repel = FALSE)+
+      theme_graph() + 
+      ggtitle(paste0("Community", i, collapse = ": "))+
+      theme(legend.position = 'none',
+            plot.title = element_text(size = 10, face = "bold"))
+  }
+  
+  return(List_Plots)
+}
+
+
+Graph1_2 <- texexcture('F:/Desktop/chapter1_2.txt')
+Graph3_4 <- texexcture('F:/Desktop/chapter3_4.txt')
+Graph5_6 <- texexcture('F:/Desktop/chapter5_6.txt')
+plots1_2 <- plots('F:/Desktop/chapter1_2.txt')
+plots3_4 <- plots('F:/Desktop/chapter3_4.txt')
+plots5_6 <- plots('F:/Desktop/chapter5_6.txt')
+ 
+
+
+layout1_2 <- create_layout(Graph1_2,  layout = 'fr')
+ggraph(layout1_2) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) ,  size = degrre),alpha = 0.5) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture The Begining Chapters(1-2)") 
+
+
+grid.arrange(grobs = plots1_2[1:2], ncol = 2)
+grid.arrange(grobs = plots1_2[3:4], ncol = 2)
+grid.arrange(grobs = plots1_2[5:6], ncol = 2)
+grid.arrange(grobs = plots1_2[7:8], ncol = 2)
+grid.arrange(grobs = plots1_2[9:10], ncol = 2)
+
+
+layout3_4 <- create_layout(Graph3_4,  layout = 'fr')
+ggraph(layout3_4) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) ,  size = degrre),alpha = 0.5) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture The Middle Chapters(3-4)")
+
+
+grid.arrange(grobs = plots3_4[1:2], ncol = 2)
+grid.arrange(grobs = plots3_4[3:4], ncol = 2)
+grid.arrange(grobs = plots3_4[5:6], ncol = 2)
+grid.arrange(grobs = plots3_4[7:8], ncol = 2)
+grid.arrange(grobs = plots3_4[9], ncol = 1)
+
+
+
+layout5_6 <- create_layout(Graph5_6,  layout = 'fr')
+ggraph(layout5_6) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) ,  size = degrre),alpha = 0.5) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture The End Chapters(5-6)")
+
+grid.arrange(grobs = plots5_6[1:2], ncol = 2)
+grid.arrange(grobs = plots5_6[3:4], ncol = 2)
+grid.arrange(grobs = plots5_6[5:6], ncol = 2)
+grid.arrange(grobs = plots5_6[7:8], ncol = 2)
+grid.arrange(grobs = plots5_6[9], ncol = 1)
+
+```
+
+### Community Evolution. 
+
+As the book is divided into three smaller subsections the evolution in time of each community within each network could be examined. The Jaccard similarity metric was used to identify each community as it evolves with time. However as the distribution of words in each chapter varied wildly this metric was un accurate, these values can be seen in the table below. Therefore it seems as if each community is independent upon its position in the story line. 
+```{r chunk65, echo=FALSE, warning = FALSE,message=FALSE}
+
+new <- function(file){
+ngram <- 5
+fileName <- file
+SummarisedText <- readChar(fileName, file.info(fileName)$size)
+stopWords <- stopwords("en")
+removeWords(SummarisedText,stopWords) -> SummarisedText
+gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+str_squish(SummarisedText) -> SummarisedText
+
+FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+splitFiveGram <- strsplit(FiveGram, " ")
+
+FiveGramTibble <- tibble()
+weights <- c(0,1,0.75,0.5,0.25)
+for(i in 1:length(splitFiveGram )){
+  tempStorage <- c()
+  tempStorage2 <- c()
+  weight <- c()
+  for(j in 2:ngram){
+    tempStorage[j-1] <- splitFiveGram [[i]][1]
+    tempStorage2[j-1] <- splitFiveGram [[i]][j]
+    weight[j-1] <-  weights[j]
+  }
+  tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+  FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+}
+
+FiveGramTibble %>% 
+  dplyr::group_by(From,To) %>%
+  dplyr::summarise(Edges = sum(Edges)) %>%
+  dplyr::filter(Edges > 0) -> FiveGramTibble
+
+Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+louivan <- igraph::cluster_louvain(Graph)
+walktrap <-  igraph::cluster_walktrap(Graph)
+degreee <- igraph::betweenness(Graph)
+eccentricty <- igraph::eccentricity(Graph)
+
+
+Graph %>% 
+  mutate(louvinCommunities = louivan$membership,
+         walktrapCommunities = walktrap$membership,
+         degrre = degreee,
+         eccc = eccentricty) %>%
+  as_tibble() -> graph
+
+temperary <- c()
+for(i in 1:length(unique(louivan$membership))){
+  graph %>% filter(louvinCommunities == i) -> temp
+  temperary[[i]] <- toString(temp$name)
+}
+ 
+return(temperary) 
+}
+
+
+communities56 <- new('F:/Desktop/chapter5_6.txt')
+communities34 <- new('F:/Desktop/chapter3_4.txt')
+communities12 <- new('F:/Desktop/chapter1_2.txt')
+
+
+
+library(stringdist)
+library(hashr)
+
+community1 <- 1:10
+JacardValue <- c()
+community2 <- c()
+for(i in 1:10){
+  tempp <- c()
+  for(j in 1:9){
+    tempp[j] <- stringdist(communities12[i], communities34[j], method = "jaccard", q = 2)
+  }
+  
+  community2[i] <- which.max(tempp)
+  JacardValue[i] <- tempp[which.max(tempp)]
+}
+
+evolution <- tibble( One = community1, Two =community2, Correlation = JacardValue)
+
+community1 <- 1:9
+JacardValue <- c()
+community2 <- c()
+for(i in 1:9){
+  tempp <- c()
+  for(j in 1:9){
+    tempp[j] <- stringdist(communities34[i], communities56[j], method = "jaccard", q = 2)
+  }
+  
+  community2[i] <- which.max(tempp)
+  JacardValue[i] <- tempp[which.max(tempp)]
+}
+
+evolution2 <- tibble( Two = community1, Three =community2, Correlation = JacardValue)
+df<-data.frame(NA,NA,NA)
+names(df)<-c('Two','Three','Correlation')
+
+
+cbind(evolution, rbind(evolution2,df)) %>%
+  kable() %>%
+  kable_styling()
+  
+  
+```
+
+However, from an examination of the communnities both Lennie and George form their own communities at every time step in the story. The two figures below represent the variation in sentiment for both George and Lennie's communities as the storyline progresses. The first figure depicts the emotional change of each cluster using a number of emotional categories including Trust, Sadness, Joy and Fear etc. And the second figure shows the change on a more rudimentary sentiment score. From the emotional
+
+```{r chunk10, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8, echo=FALSE}
+emotions <- function(file,partofstory, sentinemt){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+  
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+  
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+  
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) %>%
+    as_tibble()-> Graph
+  
+  colnames(Graph)[1] <- "word"
+  Graph %>%
+    left_join(sentinemt, by=c("word")) -> Graph
+  
+  Graph %>% 
+    dplyr::mutate(sentiment = ifelse(is.na(sentiment), 0, sentiment)) %>%
+    filter(sentiment != 0) %>%
+    dplyr::count(word,louvinCommunities, sentiment, sort = TRUE) %>%
+    dplyr::group_by(louvinCommunities, sentiment) %>%
+    dplyr:: summarise(Emotion_count = sum(n)) %>%
+    dplyr::mutate(PartOfStory = partofstory) -> Graph
+  
+  return(Graph)
+}
+
+Graph3 <- emotions('F:/Desktop/chapter5_6.txt',3,get_sentiments("nrc"))
+Graph2 <- emotions('F:/Desktop/chapter3_4.txt',2,get_sentiments("nrc"))
+Graph1 <- emotions('F:/Desktop/chapter1_2.txt',1,get_sentiments("nrc")) %>% filter(louvinCommunities != 10)
+
+EmotionGraph <- rbind(Graph1, Graph2,Graph3)
+
+
+Graph1 %>% filter(louvinCommunities == 3 | louvinCommunities == 8) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 3,'Lennie','George')) -> FilteredGraph1
+
+Graph2 %>% filter(louvinCommunities == 5 | louvinCommunities == 6) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> FilteredGraph2
+
+Graph3 %>% filter(louvinCommunities == 4 | louvinCommunities == 5) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> FilteredGraph3
+
+LennieGeorgeGraph <- rbind(FilteredGraph1, FilteredGraph2,FilteredGraph3)
+ggplot(data = LennieGeorgeGraph, aes(x = PartOfStory, y = Emotion_count, color = sentiment))+
+  geom_line(size = 3, alpha = 0.7)+
+  geom_point(color = "white", fill = "#0072B2", size = 2, alpha = 0.7) +
+  facet_wrap(~CharacterName) +
+  theme_bw()+
+  labs(title = "Of Mice & Men",
+subtitle = "Variation in the Emotion Of Each Communtity By Time")
+
+```
+
+```{r chunk11, warning=FALSE, message=FALSE,fig.width = 12, fig.height = 8,echo=FALSE}
+emotions2 <- function(file,partofstory){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+  
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+  
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+  
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) %>%
+    as_tibble()-> Graph
+  
+  colnames(Graph)[1] <- "word"
+  Graph %>%
+    left_join(get_sentiments("afinn"), by=c("word")) -> Graph
+  
+  Graph %>% 
+    dplyr::mutate(sentiment = ifelse(is.na(score), 0, score)) %>%
+    filter(score != 0) %>%
+    dplyr::group_by(louvinCommunities) %>%
+    dplyr:: summarise(TotalSentiment = sum(score)) %>%
+    dplyr::mutate(PartOfStory = partofstory) -> Graph
+  
+  return(Graph)  
+}
+
+
+Sentiment3 <- emotions2('F:/Desktop/chapter5_6.txt',3)
+Sentiment2 <- emotions2('F:/Desktop/chapter3_4.txt',2)
+Sentiment1 <- emotions2('F:/Desktop/chapter1_2.txt',1)
+
+Sentiment1 %>% filter(louvinCommunities == 3 | louvinCommunities == 8) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 3,'Lennie','George')) -> SentimentGraph1
+
+Sentiment2 %>% filter(louvinCommunities == 5 | louvinCommunities == 6) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> SentimentGraph2
+
+Sentiment3 %>% filter(louvinCommunities == 4 | louvinCommunities == 5) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> SentimentGraph3
+
+rbind(SentimentGraph1,SentimentGraph2,SentimentGraph3) %>%
+  ggplot(aes(x = PartOfStory, y = TotalSentiment, fill = as.factor(CharacterName))) +
+  geom_bar(stat = 'identity', position = 'dodge') + 
+  theme_bw()+
+  theme(legend.title=element_blank()) + 
+  labs(title = "Of Mice & Men",
+       subtitle = "Total Sentiment Of Each Communtity By Time")
+
+
+
+
+```
+
+From an emotional standpoint we can see a decrease in Lennie's Joy, Trust, Fear and Sadness as the story line progresses, whereas, George's anticipation increases. This somewhat infers the end scene of the book where Lennie was essentially put out of his misery and the decision on George's part caused an increase in anxiety with the thought of completing the act. From the more rudimentary sentiment score we can see that Lennie's is a more positive character than George. Therefore this graph does encapsulate Lennie's innocent personality, the transition from positive to negative in the last sub section also represents the negative sentiment associated with Lennie as he has killed a puppy and Curly's wife, and the whole ranch is looking to lynch him.
+
+## Conclusion.
+This report presented a type of text network analysis that draws upon approaches and methodology used in graph analysis in order to interpret textual data. This method of text network analysis produces a readable visual representation of a novel, which can then be used to provide a summary, expose the text's topical structure and find influential concepts. Each topical cluster in each subsection of the novel varied wildly around certain characters which inferred their interaction with their environment. Unfortunately due to the nature of a novel the community evolution of each topical cluster couldn't be automated as the Jacard similarity measure failed to capture evolving communities as the words around characters varied wildly from section to section. Instead the two apparent clusters representing the two main protagonists in the story "Lennie" and "George's" sentiments were examined over the entire story line. The named entity graph also provided a picture of the interaction between certain characters and objects such as Curly and his wife, or Carlson's gun which was used to kill Lennie and a dog. In essence this is a novel tool to provide a textual summary based on a 2D graph. However, in conclusion a book is too complex to be decoded and explained using a handful of selected words. 
+
+## Appendices.
+
+```{r chunkAppendices ,warning=FALSE, message=FALSE,eval = FALSE}
+
+
+
+
+#############----------------plot1----------------####################
+library(tidyverse)
+library(stringr)     
+library(tidytext)       
+library(widyr)
+library(tibble)
+library(igraph)
+library(ggraph)
+library(rJava)
+library(NLP)
+library(tm) 
+library(openNLP)
+library(qdap)
+library(RWeka)
+library(plyr)
+library(magrittr)
+library(topicmodels)
+library(SnowballC)
+library(tidygraph)
+library(syuzhet)
+library(readr) 
+library(seriation)
+library(gridExtra)
+library(kableExtra)
+
+book_title = "Of Mice and Men"
+chapters = 1:6
+chapter_stem = "MiceofMenChapter"
+ext <-".txt"
+folder<- "//fs2/18234602/Desktop/book/"
+
+PosTagged <- function(){
+  dataframes_ <- c()
+  BookChapters <- c()
+  for(i in chapters){
+    chapter <-paste0(folder,chapter_stem,i,ext)
+    RAW <-readChar(chapter, file.info(chapter)$size)
+    temp <- stringr::str_replace_all(RAW,"[^a-zA-Z\\s]", " ")
+    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+    temp2 <- tolower(temp)
+    BookChapter <- temp2 %>%
+      gsub("[\r\n]+", " ", .) %>%
+      gsub('^"',"",.) %>%
+      gsub('"$',"",.) %>% as.String
+    
+    BookChapters[i] <- RAW %>%
+      gsub("[\r\n]+", " ", .) %>%
+      gsub('^"',"",.) %>%
+      gsub('"$',"",.) %>% as.String
+    
+    token_annotator <- Maxent_Word_Token_Annotator()
+    init_s_w = annotate(BookChapter, list(Maxent_Sent_Token_Annotator(),
+                                           Maxent_Word_Token_Annotator()))
+    pos_res = annotate(BookChapter, Maxent_POS_Tag_Annotator(), init_s_w)
+    word_subset = subset(pos_res, type=='word')
+    tags = sapply(word_subset$features , '[[', "POS")
+    
+    dataframes_[[i]] = tibble(words = BookChapter[word_subset], Chapter = i , pos=tags) %>% 
+      filter(!str_detect(pos, pattern='[[:punct:]]')) %>%
+      filter(!words %in% stop_words$word)
+  }
+  
+  return(list(book = paste(BookChapters, collapse = ' '), data = rbind(dataframes_[[1]], dataframes_[[2]],dataframes_[[3]],dataframes_[[4]],dataframes_[[5]],dataframes_[[6]])))
+}
+
+POSData <- PosTagged()
+
+POSData$data %>%
+  dplyr::count(Chapter,words,sort = TRUE) %>%
+  bind_tf_idf(Chapter,words, n) %>%
+  arrange(-tf_idf) %>%
+  group_by(Chapter) %>%
+  do(head(., n = 20)) %>%
+  ungroup %>%
+  mutate(words = reorder(words, n)) %>%
+  mutate(Chapter = as.factor(Chapter)) %>%
+  ggplot(aes(words, n, fill = Chapter)) +
+  scale_fill_brewer(palette = 'Dark2')+
+  geom_col( show.legend = FALSE) +
+  facet_wrap(~ Chapter, scales = "free") +
+  coord_flip()
+
+
+
+###############-----------------plot2-----------------------########################
+
+miceOFmen <- tibble()
+#read in each chapter
+for(i in chapters){
+  chapter <-paste0(folder,chapter_stem,i,ext)
+  raw<-readChar(chapter, file.info(chapter)$size)
+  chapter_text <- raw %>%
+    gsub("[\r\n]+", " ", .) %>%
+    gsub('^"',"",.) %>%
+    gsub('"$',"",.)
+  
+  text = unlist(strsplit(chapter_text, "(?<=[[:punct:]])\\s(?=[A-Z])", perl=T))
+  #creates a tibble with 3 cols: book_title, chapter, word
+  words <- tibble(title = book_title, chapter= as.character(i), sentences = text) 
+  
+  miceOFmen <- rbind(miceOFmen, words) # add rows to the book tibble
+  
+}
+
+textCorpus <- VCorpus(VectorSource(miceOFmen$sentences))
+textCorpus <- tm_map(textCorpus, content_transformer(tolower))
+textCorpus <- tm_map(textCorpus, removePunctuation)
+textCorpus <- tm_map(textCorpus, removeNumbers)
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x) # create remove URL function
+textCorpus <- tm_map(textCorpus, content_transformer(removeURL)) # remove URLs using function
+textCorpus <- tm_map(textCorpus, removeWords, c(stopwords(kind="en"), "said"))
+textCorpus <- tm_map(textCorpus, stripWhitespace)
+
+token_delim <- " \\t\\r\\n.!?,;\"()"
+NgramTokenizer <- function(min, max) {
+  result <- function(x){
+    RWeka::NGramTokenizer(x, RWeka::Weka_control(min = min, max = max, delimiters=token_delim))
+  }
+  return(result)
+}
+
+textTDM<- TermDocumentMatrix(textCorpus, control=list(tokenize=NgramTokenizer(min=1, max=1)))
+
+esvSentiment<-get_nrc_sentiment(miceOFmen$sentences)
+Bible_ESV_Sentiment <- cbind(miceOFmen, esvSentiment)
+
+Bible_ESV_Sentiment %>% 
+  gather(emotion, value, 4:13) %>%
+  group_by(chapter,emotion) %>%
+  dplyr::summarise(total_emotion = sum(value)) %>%
+  ggplot(aes(x = emotion, y = total_emotion, fill = emotion)) +
+  geom_bar(stat = "identity") +
+  coord_flip()+
+  facet_wrap(~chapter)+
+  theme(legend.position = "none") +
+  xlab("Sentiment") +
+  ylab("Total Count") + 
+  labs(title = "Of Mice & Men",
+       subtitle = "Emotional Content by Chapter")
+
+################----------------------plot3------------------------------########################
+
+Bible_ESV_line <- miceOFmen %>% mutate(linenumber = row_number())
+tidy_books <- Bible_ESV_line %>% unnest_tokens(word,sentences)
+
+tidy_books_sentiment <- tidy_books %>% 
+  inner_join(get_sentiments("bing")) %>%
+  dplyr::count(chapter,linenumber,sentiment) %>% 
+  spread(sentiment, n, fill = 0) %>% 
+  mutate(sentiment=positive - negative)
+
+ggplot(tidy_books_sentiment, aes(x = linenumber, y = sentiment, fill = chapter))+
+  geom_bar(stat="identity")+
+  labs(title = "Of Mice & Men",
+       subtitle = "Sentiment From cover to cover")+
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        strip.text = element_blank(),
+        panel.background = element_blank(),
+        legend.position = 'bottom')
+
+
+
+##############--------------------------plot4-----------------------###################
+filteredCorr <- POSData$data %>% filter(pos %in% c('NN','VB','JJ')) %>% group_by(words) %>%
+  filter(n() >= 11) %>%
+  pairwise_cor(item=words, feature=Chapter) %>% 
+  filter(!is.na(correlation), correlation >= 0.60)
+
+Filtered_correlation_graph  <- as_tbl_graph(filteredCorr , directed = FALSE)
+louivan <- igraph::cluster_louvain(Filtered_correlation_graph )
+degreee <- igraph::betweenness(Filtered_correlation_graph)
+  
+Filtered_correlation_graph %>% mutate(louvinCommunities = louivan$membership,
+           degrre = degreee) -> Filtered_correlation_graph
+
+ggraph(Filtered_correlation_graph, layout = "fr") +
+  geom_edge_link2(aes(edge_alpha = correlation), edge_width=0.5, show.legend = FALSE) +
+  geom_node_point(aes(color = as.factor(louvinCommunities), size = degrre) ) +
+  geom_node_text(aes(label = name), size = 4, repel = TRUE, segment.color = "red", segment.alpha = 0.7, segment.size = 0.4) + 
+  theme_void()+
+  labs(title = "Of Mice & Men",
+       subtitle = "ChapterWise Correlation")
+
+
+###################------------------------PageRank---------------------------##############
+
+library(xml2)
+library(rvest)
+library(lexRankr)
+
+top_3 = lexRankr::lexRank(miceOFmen$sentences,
+                          #only 1 article; repeat same docid for all of input vector
+                          docId = rep(1, length(miceOFmen$sentences)),
+                          #return 3 sentences to mimick /u/autotldr's output
+                          n = 500,
+                          continuous = TRUE)
+
+#reorder the top 3 sentences to be in order of appearance in article
+order_of_appearance = order(as.integer(gsub("_","",top_3$sentenceId)))
+#extract sentences in order of appearance
+ordered_top_3 = top_3[order_of_appearance, "sentence"]
+
+top <- paste(ordered_top_3,collapse="") 
+
+#fileConn<-file("F:/Desktop/output.txt")
+#writeLines(top, fileConn)
+#close(fileConn)
+
+##########------------------Text visulaisation of Polisinguarity------------####################
+
+texexcture <- function(file){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) -> Graph
+  
+  return(Graph)
+}
+
+
+plots <- function(file){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) -> Graph
+  
+  sub <- c()
+  for(i in 1:length(unique(louivan$membership))){
+    sub[[i]] <- induced.subgraph(Graph,which(V(Graph)$louvinCommunities == i))
+  }
+  
+  List_Plots <- c()
+  coloors <- c('red','chocolate','blueviolet','darkolivegreen','darkorange1',
+               'deepskyblue','firebrick','blue','magenta','tan1','purple1')
+  for(i in 1:length(unique(louivan$membership))){
+    layout <- create_layout(sub[[i]],  layout = 'fr')
+    List_Plots[[i]] <- ggraph(layout) + 
+      geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+      geom_node_point(aes(alpha = 0.5, size = degrre),color = coloors[i]) +
+      #geom_node_label(aes(label = name), size = 2, alpha =0.8,color = coloors[i])+
+      geom_node_text(aes(label = name), size = 4,repel = FALSE)+
+      theme_graph() + 
+      ggtitle(paste0("Community", i, collapse = ": "))+
+      theme(legend.position = 'none',
+            plot.title = element_text(size = 10, face = "bold"))
+  }
+  
+  return(List_Plots)
+}
+
+
+Graph1_2 <- texexcture('F:/Desktop/chapter1_2.txt')
+Graph3_4 <- texexcture('F:/Desktop/chapter3_4.txt')
+Graph5_6 <- texexcture('F:/Desktop/chapter5_6.txt')
+plots1_2 <- plots('F:/Desktop/chapter1_2.txt')
+plots3_4 <- plots('F:/Desktop/chapter3_4.txt')
+plots5_6 <- plots('F:/Desktop/chapter5_6.txt')
+ 
+
+
+layout1_2 <- create_layout(Graph1_2,  layout = 'fr')
+ggraph(layout1_2) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) ,  size = degrre),alpha = 0.5) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture The Begining Chapters(1-2)") 
+
+
+grid.arrange(grobs = plots1_2[1:2], ncol = 2)
+grid.arrange(grobs = plots1_2[3:4], ncol = 2)
+grid.arrange(grobs = plots1_2[5:6], ncol = 2)
+grid.arrange(grobs = plots1_2[7:8], ncol = 2)
+grid.arrange(grobs = plots1_2[9:10], ncol = 2)
+
+
+layout3_4 <- create_layout(Graph3_4,  layout = 'fr')
+ggraph(layout3_4) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) ,  size = degrre),alpha = 0.5) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture The Middle Chapters(3-4)")
+
+
+grid.arrange(grobs = plots3_4[1:2], ncol = 2)
+grid.arrange(grobs = plots3_4[3:4], ncol = 2)
+grid.arrange(grobs = plots3_4[5:6], ncol = 2)
+grid.arrange(grobs = plots3_4[7:8], ncol = 2)
+grid.arrange(grobs = plots3_4[9], ncol = 1)
+
+
+
+layout5_6 <- create_layout(Graph5_6,  layout = 'fr')
+ggraph(layout5_6) + 
+  geom_edge_link(aes(edge_alpha = Edges), edge_width = 0.5) + 
+  geom_node_point(aes(color = as.factor(louvinCommunities) ,  size = degrre),alpha = 0.5) +
+  theme_graph() +
+  labs(title = "Of Mice & Men",
+       subtitle = "Textexture The End Chapters(5-6)")
+
+grid.arrange(grobs = plots5_6[1:2], ncol = 2)
+grid.arrange(grobs = plots5_6[3:4], ncol = 2)
+grid.arrange(grobs = plots5_6[5:6], ncol = 2)
+grid.arrange(grobs = plots5_6[7:8], ncol = 2)
+grid.arrange(grobs = plots5_6[9], ncol = 1)
+
+####################------------Community Evaluation-----------###################
+new <- function(file){
+ngram <- 5
+fileName <- file
+SummarisedText <- readChar(fileName, file.info(fileName)$size)
+stopWords <- stopwords("en")
+removeWords(SummarisedText,stopWords) -> SummarisedText
+gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+str_squish(SummarisedText) -> SummarisedText
+
+FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+splitFiveGram <- strsplit(FiveGram, " ")
+
+FiveGramTibble <- tibble()
+weights <- c(0,1,0.75,0.5,0.25)
+for(i in 1:length(splitFiveGram )){
+  tempStorage <- c()
+  tempStorage2 <- c()
+  weight <- c()
+  for(j in 2:ngram){
+    tempStorage[j-1] <- splitFiveGram [[i]][1]
+    tempStorage2[j-1] <- splitFiveGram [[i]][j]
+    weight[j-1] <-  weights[j]
+  }
+  tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+  FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+}
+
+FiveGramTibble %>% 
+  dplyr::group_by(From,To) %>%
+  dplyr::summarise(Edges = sum(Edges)) %>%
+  dplyr::filter(Edges > 0) -> FiveGramTibble
+
+Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+louivan <- igraph::cluster_louvain(Graph)
+walktrap <-  igraph::cluster_walktrap(Graph)
+degreee <- igraph::betweenness(Graph)
+eccentricty <- igraph::eccentricity(Graph)
+
+
+Graph %>% 
+  mutate(louvinCommunities = louivan$membership,
+         walktrapCommunities = walktrap$membership,
+         degrre = degreee,
+         eccc = eccentricty) %>%
+  as_tibble() -> graph
+
+temperary <- c()
+for(i in 1:length(unique(louivan$membership))){
+  graph %>% filter(louvinCommunities == i) -> temp
+  temperary[[i]] <- toString(temp$name)
+}
+ 
+return(temperary) 
+}
+
+
+communities56 <- new('F:/Desktop/chapter5_6.txt')
+communities34 <- new('F:/Desktop/chapter3_4.txt')
+communities12 <- new('F:/Desktop/chapter1_2.txt')
+
+
+
+library(stringdist)
+library(hashr)
+
+community1 <- 1:10
+JacardValue <- c()
+community2 <- c()
+for(i in 1:10){
+  tempp <- c()
+  for(j in 1:9){
+    tempp[j] <- stringdist(communities12[i], communities34[j], method = "jaccard", q = 2)
+  }
+  
+  community2[i] <- which.max(tempp)
+  JacardValue[i] <- tempp[which.max(tempp)]
+}
+
+evolution <- tibble( One = community1, Two =community2, Correlation = JacardValue)
+
+community1 <- 1:9
+JacardValue <- c()
+community2 <- c()
+for(i in 1:9){
+  tempp <- c()
+  for(j in 1:9){
+    tempp[j] <- stringdist(communities34[i], communities56[j], method = "jaccard", q = 2)
+  }
+  
+  community2[i] <- which.max(tempp)
+  JacardValue[i] <- tempp[which.max(tempp)]
+}
+
+evolution2 <- tibble( Two = community1, Three =community2, Correlation = JacardValue)
+df<-data.frame(NA,NA,NA)
+names(df)<-c('Two','Three','Correlation')
+
+
+cbind(evolution, rbind(evolution2,df)) %>%
+  kable() %>%
+  kable_styling()
+  
+##################---------------------Emotion With Time--------------------################
+emotions <- function(file,partofstory, sentinemt){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+  
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+  
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+  
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) %>%
+    as_tibble()-> Graph
+  
+  colnames(Graph)[1] <- "word"
+  Graph %>%
+    left_join(sentinemt, by=c("word")) -> Graph
+  
+  Graph %>% 
+    dplyr::mutate(sentiment = ifelse(is.na(sentiment), 0, sentiment)) %>%
+    filter(sentiment != 0) %>%
+    dplyr::count(word,louvinCommunities, sentiment, sort = TRUE) %>%
+    dplyr::group_by(louvinCommunities, sentiment) %>%
+    dplyr:: summarise(Emotion_count = sum(n)) %>%
+    dplyr::mutate(PartOfStory = partofstory) -> Graph
+  
+  return(Graph)
+}
+
+Graph3 <- emotions('F:/Desktop/chapter5_6.txt',3,get_sentiments("nrc"))
+Graph2 <- emotions('F:/Desktop/chapter3_4.txt',2,get_sentiments("nrc"))
+Graph1 <- emotions('F:/Desktop/chapter1_2.txt',1,get_sentiments("nrc")) %>% filter(louvinCommunities != 10)
+
+EmotionGraph <- rbind(Graph1, Graph2,Graph3)
+
+
+Graph1 %>% filter(louvinCommunities == 3 | louvinCommunities == 8) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 3,'Lennie','George')) -> FilteredGraph1
+
+Graph2 %>% filter(louvinCommunities == 5 | louvinCommunities == 6) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> FilteredGraph2
+
+Graph3 %>% filter(louvinCommunities == 4 | louvinCommunities == 5) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> FilteredGraph3
+
+LennieGeorgeGraph <- rbind(FilteredGraph1, FilteredGraph2,FilteredGraph3)
+ggplot(data = LennieGeorgeGraph, aes(x = PartOfStory, y = Emotion_count, color = sentiment))+
+  geom_line(size = 3, alpha = 0.7)+
+  geom_point(color = "white", fill = "#0072B2", size = 2, alpha = 0.7) +
+  facet_wrap(~CharacterName) +
+  theme_bw()+
+  labs(title = "Of Mice & Men",
+subtitle = "Variation in the Emotion Of Each Communtity By Time")
+
+
+#########------------------Sentiment As a Function Of time---------###########
+
+emotions2 <- function(file,partofstory){
+  ngram <- 5
+  fileName <- file
+  SummarisedText <- readChar(fileName, file.info(fileName)$size)
+  stopWords <- stopwords("en")
+  removeWords(SummarisedText,stopWords) -> SummarisedText
+  gsub('[[:punct:] ]+',' ',SummarisedText) -> SummarisedText
+  str_remove_all(SummarisedText, '\r\n') -> SummarisedText
+  str_squish(SummarisedText) -> SummarisedText
+  
+  FiveGram = ngram_tokenizer(ngram)(tolower(SummarisedText))
+  splitFiveGram <- strsplit(FiveGram, " ")
+  
+  FiveGramTibble <- tibble()
+  weights <- c(0,1,0.75,0.5,0.25)
+  for(i in 1:length(splitFiveGram )){
+    tempStorage <- c()
+    tempStorage2 <- c()
+    weight <- c()
+    for(j in 2:ngram){
+      tempStorage[j-1] <- splitFiveGram [[i]][1]
+      tempStorage2[j-1] <- splitFiveGram [[i]][j]
+      weight[j-1] <-  weights[j]
+    }
+    tempTibble <- tibble(From = tempStorage, To = tempStorage2, Edges = weight)
+    FiveGramTibble <- rbind(FiveGramTibble, tempTibble)
+  }
+  
+  FiveGramTibble %>% 
+    dplyr::group_by(From,To) %>%
+    dplyr::summarise(Edges = sum(Edges)) %>%
+    dplyr::filter(Edges > 0) -> FiveGramTibble
+  
+  Graph <- as_tbl_graph(FiveGramTibble , directed = FALSE)
+  louivan <- igraph::cluster_louvain(Graph)
+  walktrap <-  igraph::cluster_walktrap(Graph)
+  degreee <- igraph::betweenness(Graph)
+  eccentricty <- igraph::eccentricity(Graph)
+  
+  
+  Graph %>% 
+    mutate(louvinCommunities = louivan$membership,
+           walktrapCommunities = walktrap$membership,
+           degrre = degreee,
+           eccc = eccentricty) %>%
+    as_tibble()-> Graph
+  
+  colnames(Graph)[1] <- "word"
+  Graph %>%
+    left_join(get_sentiments("afinn"), by=c("word")) -> Graph
+  
+  Graph %>% 
+    dplyr::mutate(sentiment = ifelse(is.na(score), 0, score)) %>%
+    filter(score != 0) %>%
+    dplyr::group_by(louvinCommunities) %>%
+    dplyr:: summarise(TotalSentiment = sum(score)) %>%
+    dplyr::mutate(PartOfStory = partofstory) -> Graph
+  
+  return(Graph)  
+}
+
+
+Sentiment3 <- emotions2('F:/Desktop/chapter5_6.txt',3)
+Sentiment2 <- emotions2('F:/Desktop/chapter3_4.txt',2)
+Sentiment1 <- emotions2('F:/Desktop/chapter1_2.txt',1)
+
+Sentiment1 %>% filter(louvinCommunities == 3 | louvinCommunities == 8) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 3,'Lennie','George')) -> SentimentGraph1
+
+Sentiment2 %>% filter(louvinCommunities == 5 | louvinCommunities == 6) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> SentimentGraph2
+
+Sentiment3 %>% filter(louvinCommunities == 4 | louvinCommunities == 5) %>%
+  dplyr::mutate(CharacterName = if_else(louvinCommunities == 5,'Lennie','George')) -> SentimentGraph3
+
+rbind(SentimentGraph1,SentimentGraph2,SentimentGraph3) %>%
+  ggplot(aes(x = PartOfStory, y = TotalSentiment, fill = as.factor(CharacterName))) +
+  geom_bar(stat = 'identity', position = 'dodge') + 
+  theme_bw()+
+  theme(legend.title=element_blank()) + 
+  labs(title = "Of Mice & Men",
+       subtitle = "Total Sentiment Of Each Communtity By Time")
+
+
+```
