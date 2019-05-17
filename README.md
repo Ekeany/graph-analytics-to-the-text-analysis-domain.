@@ -30,5 +30,19 @@ Natural Language Processing (NLP) is a sub-field of Artificial Intelligence that
 
 The first technique implemented was simply a frequency count of the top 15 words in each chapter of the book. The frequency of each word was scaled using the inverse document frequency which assigns a higher weight to more important and relevant words in each chapter. The plots give a brief introduction to the content of each chapter however. No theme, relationships or characters are defined
 
+<p align="center">
+  <img width="932" height="618" src="/Images_/image1.PNG">
+</p>
 
+The second technique utilized was sentiment analysis this was implemented using the Tidytext package in R. This package provided a referenced data frame that contained the sentiment score of a variety of words. The chapter wise emotional sentiment was then calculated using a number of emotional categories including Trust, Sadness, Joy and Fear etc. From the figure below the overall distribution of each chapter varies slightly however there is a large discrepancy in the total number of words in each chapter which can be neglected based upon the relative size of each chapter.
+
+<p align="center">
+  <img width="939" height="614" src="/Images_/image2.PNG">
+</p>
+
+The third plot encapsulates a more rudimentary sentiment metric which refers to the number of either positive or negative words in a sentence. The total sentiment for each sentence in every chapter was plotted to give an indication on plot progression as a function of time. The two large down spikes at the middle and end of the book correspond to intense parts revolving crook’s the farm hand sheep dog being shot and the death of Candy. The problem with this form of analysis is that the sentiment is predicated upon how the author linguistically describes the scene. This is apparent as the climatic end scene where George shoots his best friend is not indicated by a large negative score as the scene involves George trying to make Lennie feel at ease by painting a picture about a better life where the owned their own land.
+
+<p align="center">
+  <img width="956" height="626" src="/Images_/image3.PNG">
+</p>
 
